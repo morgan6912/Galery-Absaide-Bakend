@@ -9,10 +9,10 @@ import io.ktor.serialization.kotlinx.json.*
 import io.ktor.server.application.*
 import io.ktor.server.auth.*
 import io.ktor.server.auth.jwt.*
-import io.ktor.server.plugins.calllogging.* // Corregido: doble 'g'
+import io.ktor.server.plugins.calllogging.*
 import io.ktor.server.plugins.contentnegotiation.*
 import io.ktor.server.plugins.cors.routing.*
-import io.ktor.server.response.* // Necesario para respond y respondFile
+import io.ktor.server.response.*
 import io.ktor.server.routing.*
 import kotlinx.serialization.json.Json
 import org.slf4j.event.Level
@@ -68,6 +68,9 @@ fun Application.module() {
     routing {
         authRoutes(jwtSecret, jwtIssuer, jwtAudience)
 
+        // Rutas públicas — sin autenticación
+        artworkRoutes()
+
         get("/uploads/{filename}") {
             val filename = call.parameters["filename"] ?: return@get
             val file = File("uploads/$filename")
@@ -78,8 +81,8 @@ fun Application.module() {
             }
         }
 
+        // Rutas protegidas — requieren JWT
         authenticate("jwt-auth") {
-            artworkRoutes()
             userRoutes()
             favoriteRoutes()
             uploadRoutes()
@@ -87,7 +90,6 @@ fun Application.module() {
             messageRoutes()
             reactionRoutes()
             followRoutes()
-
             exhibitionRoutes()
             artistRequestRoutes()
         }
