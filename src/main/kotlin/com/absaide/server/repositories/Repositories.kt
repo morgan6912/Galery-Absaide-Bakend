@@ -51,13 +51,15 @@ class ArtworkRepository {
         val artistName = Users.selectAll()
             .where { Users.id eq artistId }
             .singleOrNull()?.get(Users.name) ?: ""
-        ArtworkDto(stmt[Artworks.id], req.title, req.description, artistId, req.imageUrl, artistName)
+        ArtworkDto(stmt[Artworks.id], req.title, req.description ?: "",
+            artistId, req.imageUrl, artistName)
     }
     fun delete(id: Int): Boolean = transaction {
         Artworks.deleteWhere { Artworks.id eq id } > 0
     }
     private fun ResultRow.toArtworkDto() = ArtworkDto(
-        this[Artworks.id], this[Artworks.title], this[Artworks.description],
+        this[Artworks.id], this[Artworks.title],
+        this[Artworks.description] ?: "",
         this[Artworks.artistId], this[Artworks.imageUrl], this[Users.name]
     )
 }
@@ -71,7 +73,8 @@ class FavoriteRepository {
             .where { Artworks.id inList ids }
             .map {
                 ArtworkDto(
-                    it[Artworks.id], it[Artworks.title], it[Artworks.description],
+                    it[Artworks.id], it[Artworks.title],
+                    it[Artworks.description] ?: "",
                     it[Artworks.artistId], it[Artworks.imageUrl], it[Users.name]
                 )
             }
@@ -116,7 +119,8 @@ class InterestRepository {
             .where { Artworks.id inList ids }
             .map {
                 ArtworkDto(
-                    it[Artworks.id], it[Artworks.title], it[Artworks.description],
+                    it[Artworks.id], it[Artworks.title],
+                    it[Artworks.description] ?: "",
                     it[Artworks.artistId], it[Artworks.imageUrl], it[Users.name]
                 )
             }
@@ -160,7 +164,7 @@ class MessageRepository {
                 MessageDto(
                     row[Messages.id], row[Messages.senderId], senderName,
                     row[Messages.receiverId], row[Messages.artworkId],
-                    artworkTitle, row[Messages.content], row[Messages.createdAt]
+                    artworkTitle, row[Messages.content] ?: "", row[Messages.createdAt]
                 )
             }
     }
@@ -175,13 +179,12 @@ class MessageRepository {
                 MessageDto(
                     row[Messages.id], row[Messages.senderId], senderName,
                     row[Messages.receiverId], row[Messages.artworkId],
-                    artworkTitle, row[Messages.content], row[Messages.createdAt]
+                    artworkTitle, row[Messages.content] ?: "", row[Messages.createdAt]
                 )
             }
     }
 }
 
-// ── Reactions ──────────────────────────────────────────────────────────────
 class ReactionRepository {
     fun addOrUpdate(userId: Int, artworkId: Int, emoji: String): ReactionDto = transaction {
         Reactions.deleteWhere {
@@ -194,20 +197,17 @@ class ReactionRepository {
         }
         ReactionDto(stmt[Reactions.id], userId, artworkId, emoji)
     }
-
     fun remove(userId: Int, artworkId: Int): Boolean = transaction {
         Reactions.deleteWhere {
             (Reactions.userId eq userId) and (Reactions.artworkId eq artworkId)
         } > 0
     }
-
     fun getByArtwork(artworkId: Int): List<ReactionCountDto> = transaction {
         Reactions.selectAll()
             .where { Reactions.artworkId eq artworkId }
             .groupBy { it[Reactions.emoji] }
             .map { (emoji, rows) -> ReactionCountDto(emoji, rows.size) }
     }
-
     fun getUserReaction(userId: Int, artworkId: Int): String? = transaction {
         Reactions.selectAll()
             .where {
@@ -215,7 +215,6 @@ class ReactionRepository {
                         (Reactions.artworkId eq artworkId)
             }.singleOrNull()?.get(Reactions.emoji)
     }
-
     fun getAllForArtworks(artworkIds: List<Int>): Map<Int, List<ReactionCountDto>> = transaction {
         Reactions.selectAll()
             .where { Reactions.artworkId inList artworkIds }
@@ -227,7 +226,6 @@ class ReactionRepository {
     }
 }
 
-// ── Follows ────────────────────────────────────────────────────────────────
 class FollowRepository {
     fun follow(followerId: Int, artistId: Int): FollowDto = transaction {
         val stmt = Follows.insert {
@@ -236,13 +234,11 @@ class FollowRepository {
         }
         FollowDto(stmt[Follows.id], followerId, artistId)
     }
-
     fun unfollow(followerId: Int, artistId: Int): Boolean = transaction {
         Follows.deleteWhere {
             (Follows.followerId eq followerId) and (Follows.artistId eq artistId)
         } > 0
     }
-
     fun isFollowing(followerId: Int, artistId: Int): Boolean = transaction {
         Follows.selectAll()
             .where {
@@ -250,7 +246,6 @@ class FollowRepository {
                         (Follows.artistId eq artistId)
             }.count() > 0
     }
-
     fun getFollowing(followerId: Int): List<ArtistPublicDto> = transaction {
         val artistIds = Follows.selectAll()
             .where { Follows.followerId eq followerId }
@@ -272,13 +267,11 @@ class FollowRepository {
                 )
             }
     }
-
     fun getFollowers(artistId: Int): Int = transaction {
         Follows.selectAll()
             .where { Follows.artistId eq artistId }
             .count().toInt()
     }
-
     fun getArtists(followerId: Int): List<ArtistPublicDto> = transaction {
         val followingIds = Follows.selectAll()
             .where { Follows.followerId eq followerId }
@@ -301,7 +294,7 @@ class FollowRepository {
             }
     }
 }
-// ── User Admin ─────────────────────────────────────────────────────────────
+
 class UserAdminRepository {
     fun updateRole(id: Int, role: String): Boolean = transaction {
         val roleEnum = runCatching { RoleEnum.valueOf(role.uppercase()) }
@@ -310,7 +303,6 @@ class UserAdminRepository {
             it[Users.role] = roleEnum
         } > 0
     }
-
     fun updateStatus(id: Int, status: String): Boolean = transaction {
         Users.update({ Users.id eq id }) {
             it[Users.status] = status
@@ -318,18 +310,15 @@ class UserAdminRepository {
     }
 }
 
-// ── Exhibitions ────────────────────────────────────────────────────────────
 class ExhibitionRepository {
     fun getAll(): List<ExhibitionDto> = transaction {
         Exhibitions.selectAll().map { it.toDto() }
     }
-
     fun getByOwner(ownerId: Int): List<ExhibitionDto> = transaction {
         Exhibitions.selectAll()
             .where { Exhibitions.ownerId eq ownerId }
             .map { it.toDto() }
     }
-
     fun create(ownerId: Int, req: ExhibitionRequest): ExhibitionDto = transaction {
         val stmt = Exhibitions.insert {
             it[Exhibitions.name]        = req.name
@@ -339,10 +328,9 @@ class ExhibitionRepository {
             it[Exhibitions.status]      = "activa"
             it[Exhibitions.ownerId]     = ownerId
         }
-        ExhibitionDto(stmt[Exhibitions.id], req.name, req.description,
+        ExhibitionDto(stmt[Exhibitions.id], req.name, req.description ?: "",
             req.startDate, req.endDate, "activa", ownerId)
     }
-
     fun update(id: Int, req: ExhibitionRequest): Boolean = transaction {
         Exhibitions.update({ Exhibitions.id eq id }) {
             it[Exhibitions.name]        = req.name
@@ -351,24 +339,21 @@ class ExhibitionRepository {
             it[Exhibitions.endDate]     = req.endDate
         } > 0
     }
-
     fun delete(id: Int): Boolean = transaction {
         Exhibitions.deleteWhere { Exhibitions.id eq id } > 0
     }
-
     private fun ResultRow.toDto() = ExhibitionDto(
-        this[Exhibitions.id], this[Exhibitions.name], this[Exhibitions.description],
+        this[Exhibitions.id], this[Exhibitions.name],
+        this[Exhibitions.description] ?: "",
         this[Exhibitions.startDate], this[Exhibitions.endDate],
         this[Exhibitions.status], this[Exhibitions.ownerId]
     )
 }
 
-// ── Artist Requests ────────────────────────────────────────────────────────
 class ArtistRequestRepository {
     fun getAll(): List<ArtistRequestDto> = transaction {
         ArtistRequests.selectAll().map { it.toDto() }
     }
-
     fun create(req: ArtistRequestRequest): ArtistRequestDto = transaction {
         val now = java.time.LocalDateTime.now().toString()
         val stmt = ArtistRequests.insert {
@@ -380,18 +365,17 @@ class ArtistRequestRepository {
             it[ArtistRequests.createdAt]   = now
         }
         ArtistRequestDto(stmt[ArtistRequests.id], req.name, req.email,
-            req.description, req.website, "pendiente", now)
+            req.description ?: "", req.website, "pendiente", now)
     }
-
     fun process(id: Int, status: String): Boolean = transaction {
         ArtistRequests.update({ ArtistRequests.id eq id }) {
             it[ArtistRequests.status] = status
         } > 0
     }
-
     private fun ResultRow.toDto() = ArtistRequestDto(
         this[ArtistRequests.id], this[ArtistRequests.name], this[ArtistRequests.email],
-        this[ArtistRequests.description], this[ArtistRequests.website],
+        this[ArtistRequests.description] ?: "",
+        this[ArtistRequests.website],
         this[ArtistRequests.status], this[ArtistRequests.createdAt]
     )
 }
