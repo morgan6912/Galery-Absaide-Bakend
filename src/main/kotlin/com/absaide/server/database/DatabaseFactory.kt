@@ -44,7 +44,7 @@ object Users : Table("users") {
 object Artworks : Table("artworks") {
     val id          = integer("id").autoIncrement()
     val title       = varchar("title", 200)
-    val description = text("description")
+    val description = text("description").nullable()
     val artistId    = integer("artist_id").references(Users.id)
     val imageUrl    = varchar("image_url", 500)
     override val primaryKey = PrimaryKey(id)
@@ -71,7 +71,7 @@ object Messages : Table("messages") {
     val senderId   = integer("sender_id").references(Users.id)
     val receiverId = integer("receiver_id").references(Users.id)
     val artworkId  = integer("artwork_id").references(Artworks.id)
-    val content    = text("content")
+    val content    = text("content").nullable()
     val createdAt  = varchar("created_at", 50)
     override val primaryKey = PrimaryKey(id)
 }
@@ -98,7 +98,7 @@ object Follows : Table("follows") {
 object Exhibitions : Table("exhibitions") {
     val id          = integer("id").autoIncrement()
     val name        = varchar("name", 200)
-    val description = text("description").default("")
+    val description = text("description").nullable()
     val startDate   = varchar("start_date", 20).default("")
     val endDate     = varchar("end_date", 20).default("")
     val status      = varchar("status", 20).default("activa")
@@ -110,7 +110,7 @@ object ArtistRequests : Table("artist_requests") {
     val id          = integer("id").autoIncrement()
     val name        = varchar("name", 200)
     val email       = varchar("email", 200)
-    val description = text("description").default("")
+    val description = text("description").nullable()
     val website     = varchar("website", 300).default("")
     val status      = varchar("status", 20).default("pendiente")
     val createdAt   = varchar("created_at", 50).default("")
