@@ -1,10 +1,10 @@
-FROM eclipse-temurin:17-jdk AS build
+FROM amazoncorretto:17-alpine AS build
 WORKDIR /app
 COPY . .
 RUN chmod +x gradlew
-RUN ./gradlew buildFatJar --no-daemon
+RUN ./gradlew buildFatJar --no-daemon --stacktrace
 
-FROM eclipse-temurin:17-jre
+FROM amazoncorretto:17-alpine
 WORKDIR /app
 COPY --from=build /app/build/libs/*.jar app.jar
 RUN mkdir -p uploads
