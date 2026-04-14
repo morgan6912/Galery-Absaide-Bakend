@@ -36,3 +36,10 @@ dependencies {
     implementation("ch.qos.logback:logback-classic:1.5.12")
     testImplementation(kotlin("test"))
 }
+
+// ← agregar esto al final
+ktor {
+    fatJar {
+        archiveFileName.set("app.jar")
+    }
+}

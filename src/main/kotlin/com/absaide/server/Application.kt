@@ -46,6 +46,7 @@ fun Application.module() {
         allowMethod(HttpMethod.Post)
         allowMethod(HttpMethod.Delete)
         allowMethod(HttpMethod.Put)
+        allowNonSimpleContentTypes = true
     }
 
     install(Authentication) {
@@ -82,6 +83,13 @@ fun Application.module() {
             userRoutes()
             favoriteRoutes()
             uploadRoutes()
+            interestRoutes()
+            messageRoutes()
+            reactionRoutes()
+            followRoutes()
+
+            exhibitionRoutes()
+            artistRequestRoutes()
         }
     }
 }

@@ -35,32 +35,72 @@ fun Route.artworkRoutes() {
             call.respond(HttpStatusCode.Created, svc.create(artistId, call.receive()))
         }
         delete("/{id}") {
-            val id = call.parameters["id"]?.toIntOrNull() ?: return@delete call.respond(HttpStatusCode.BadRequest)
+            val id = call.parameters["id"]?.toIntOrNull()
+                ?: return@delete call.respond(HttpStatusCode.BadRequest)
             if (svc.delete(id)) call.respond(HttpStatusCode.OK, ApiResponse<Nothing>(true, "Obra eliminada"))
             else call.respond(HttpStatusCode.NotFound, ApiResponse<Nothing>(false, "No encontrada"))
         }
     }
 }
 
+// ── Usuarios + Admin en un solo bloque ────────────────────────────────────
 fun Route.userRoutes() {
-    val svc = UserService(UserRepository())
+    val svc       = UserService(UserRepository())
+    val adminRepo = UserAdminRepository()
+
     route("/users") {
+        // Listar todos (solo admin)
         get {
             val role = call.principal<JWTPrincipal>()?.payload?.getClaim("role")?.asString()
-            if (role != "ADMIN") return@get call.respond(HttpStatusCode.Forbidden, ApiResponse<Nothing>(false, "Solo admins"))
+            if (role != "ADMIN") return@get call.respond(
+                HttpStatusCode.Forbidden, ApiResponse<Nothing>(false, "Solo admins"))
             call.respond(HttpStatusCode.OK, svc.getAll())
         }
+
+        // Ver uno por id
         get("/{id}") {
-            val id = call.parameters["id"]?.toIntOrNull() ?: return@get call.respond(HttpStatusCode.BadRequest)
+            val id = call.parameters["id"]?.toIntOrNull()
+                ?: return@get call.respond(HttpStatusCode.BadRequest)
             svc.getById(id)?.let { call.respond(HttpStatusCode.OK, it) }
                 ?: call.respond(HttpStatusCode.NotFound, ApiResponse<Nothing>(false, "No encontrado"))
         }
+
+        // Eliminar usuario (solo admin)
         delete("/{id}") {
             val role = call.principal<JWTPrincipal>()?.payload?.getClaim("role")?.asString()
             if (role != "ADMIN") return@delete call.respond(HttpStatusCode.Forbidden)
-            val id = call.parameters["id"]?.toIntOrNull() ?: return@delete call.respond(HttpStatusCode.BadRequest)
+            val id = call.parameters["id"]?.toIntOrNull()
+                ?: return@delete call.respond(HttpStatusCode.BadRequest)
             if (svc.delete(id)) call.respond(HttpStatusCode.OK, ApiResponse<Nothing>(true, "Usuario eliminado"))
             else call.respond(HttpStatusCode.NotFound, ApiResponse<Nothing>(false, "No encontrado"))
+        }
+
+        // Cambiar rol (solo admin)
+        put("/{id}/role") {
+            val role = call.principal<JWTPrincipal>()?.payload?.getClaim("role")?.asString()
+            if (role != "ADMIN") return@put call.respond(
+                HttpStatusCode.Forbidden, ApiResponse<Nothing>(false, "Solo admins"))
+            val id = call.parameters["id"]?.toIntOrNull()
+                ?: return@put call.respond(HttpStatusCode.BadRequest)
+            val req = call.receive<UpdateRoleRequest>()
+            if (adminRepo.updateRole(id, req.role))
+                call.respond(HttpStatusCode.OK, ApiResponse<Nothing>(true, "Rol actualizado"))
+            else
+                call.respond(HttpStatusCode.NotFound, ApiResponse<Nothing>(false, "No encontrado"))
+        }
+
+        // Cambiar estado/ban (solo admin)
+        put("/{id}/status") {
+            val role = call.principal<JWTPrincipal>()?.payload?.getClaim("role")?.asString()
+            if (role != "ADMIN") return@put call.respond(
+                HttpStatusCode.Forbidden, ApiResponse<Nothing>(false, "Solo admins"))
+            val id = call.parameters["id"]?.toIntOrNull()
+                ?: return@put call.respond(HttpStatusCode.BadRequest)
+            val req = call.receive<UpdateStatusRequest>()
+            if (adminRepo.updateStatus(id, req.status))
+                call.respond(HttpStatusCode.OK, ApiResponse<Nothing>(true, "Estado actualizado"))
+            else
+                call.respond(HttpStatusCode.NotFound, ApiResponse<Nothing>(false, "No encontrado"))
         }
     }
 }
@@ -85,6 +125,70 @@ fun Route.favoriteRoutes() {
                 ?: return@delete call.respond(HttpStatusCode.BadRequest)
             if (svc.remove(userId, artworkId)) call.respond(HttpStatusCode.OK, ApiResponse<Nothing>(true, "Eliminado"))
             else call.respond(HttpStatusCode.NotFound, ApiResponse<Nothing>(false, "No encontrado"))
+        }
+    }
+}
+
+fun Route.exhibitionRoutes() {
+    val repo = ExhibitionRepository()
+    route("/exhibitions") {
+        get {
+            val userId = call.principal<JWTPrincipal>()?.payload?.getClaim("userId")?.asInt()
+                ?: return@get call.respond(HttpStatusCode.Unauthorized)
+            val role = call.principal<JWTPrincipal>()?.payload?.getClaim("role")?.asString()
+            val list = if (role == "ADMIN") repo.getAll() else repo.getByOwner(userId)
+            call.respond(HttpStatusCode.OK, list)
+        }
+        post {
+            val userId = call.principal<JWTPrincipal>()?.payload?.getClaim("userId")?.asInt()
+                ?: return@post call.respond(HttpStatusCode.Unauthorized)
+            val req = call.receive<ExhibitionRequest>()
+            call.respond(HttpStatusCode.Created, repo.create(userId, req))
+        }
+        put("/{id}") {
+            val id  = call.parameters["id"]?.toIntOrNull()
+                ?: return@put call.respond(HttpStatusCode.BadRequest)
+            val req = call.receive<ExhibitionRequest>()
+            if (repo.update(id, req))
+                call.respond(HttpStatusCode.OK, ApiResponse<Nothing>(true, "Actualizada"))
+            else
+                call.respond(HttpStatusCode.NotFound, ApiResponse<Nothing>(false, "No encontrada"))
+        }
+        delete("/{id}") {
+            val id = call.parameters["id"]?.toIntOrNull()
+                ?: return@delete call.respond(HttpStatusCode.BadRequest)
+            if (repo.delete(id))
+                call.respond(HttpStatusCode.OK, ApiResponse<Nothing>(true, "Eliminada"))
+            else
+                call.respond(HttpStatusCode.NotFound, ApiResponse<Nothing>(false, "No encontrada"))
+        }
+    }
+}
+
+fun Route.artistRequestRoutes() {
+    val repo = ArtistRequestRepository()
+    route("/requests") {
+        get {
+            val role = call.principal<JWTPrincipal>()?.payload?.getClaim("role")?.asString()
+            if (role != "ADMIN") return@get call.respond(
+                HttpStatusCode.Forbidden, ApiResponse<Nothing>(false, "Solo admins"))
+            call.respond(HttpStatusCode.OK, repo.getAll())
+        }
+        post {
+            val req = call.receive<ArtistRequestRequest>()
+            call.respond(HttpStatusCode.Created, repo.create(req))
+        }
+        put("/{id}/process") {
+            val role = call.principal<JWTPrincipal>()?.payload?.getClaim("role")?.asString()
+            if (role != "ADMIN") return@put call.respond(
+                HttpStatusCode.Forbidden, ApiResponse<Nothing>(false, "Solo admins"))
+            val id  = call.parameters["id"]?.toIntOrNull()
+                ?: return@put call.respond(HttpStatusCode.BadRequest)
+            val req = call.receive<ProcessRequestDto>()
+            if (repo.process(id, req.status))
+                call.respond(HttpStatusCode.OK, ApiResponse<Nothing>(true, "Solicitud procesada"))
+            else
+                call.respond(HttpStatusCode.NotFound, ApiResponse<Nothing>(false, "No encontrada"))
         }
     }
 }

@@ -38,7 +38,7 @@ fun Route.uploadRoutes() {
                             input.copyTo(output)
                         }
                     }
-                    imageUrl = "/uploads/$fileName"
+                    imageUrl = "http://192.168.117.92:8080/uploads/$fileName"
                 }
                 else -> {}
             }
