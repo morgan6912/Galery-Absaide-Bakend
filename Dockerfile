@@ -1,9 +1,10 @@
-FROM gradle:8.5-jdk17 AS build
+FROM eclipse-temurin:17-jdk AS build
 WORKDIR /app
 COPY . .
-RUN gradle buildFatJar --no-daemon
+RUN chmod +x gradlew
+RUN ./gradlew buildFatJar --no-daemon
 
-FROM openjdk:17-jdk-slim
+FROM eclipse-temurin:17-jre
 WORKDIR /app
 COPY --from=build /app/build/libs/*.jar app.jar
 RUN mkdir -p uploads
