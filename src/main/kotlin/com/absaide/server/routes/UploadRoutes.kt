@@ -9,11 +9,12 @@ import io.ktor.server.request.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
 import com.absaide.server.models.ApiResponse
-import java.io.File
-import java.util.UUID
+import java.net.HttpURLConnection
+import java.net.URL
+import java.io.ByteArrayOutputStream
+import java.io.PrintStream
 
 fun Route.uploadRoutes() {
-    val uploadsDir = File("uploads").apply { mkdirs() }
 
     post("/upload/image") {
         val principal = call.principal<JWTPrincipal>()
@@ -24,48 +25,82 @@ fun Route.uploadRoutes() {
             )
 
         val multipart = call.receiveMultipart()
-        var imageUrl: String? = null
+        var imageBytes: ByteArray? = null
+        var fileName = "image.jpg"
 
         multipart.forEachPart { part ->
             when (part) {
                 is PartData.FileItem -> {
-                    val extension = part.originalFileName
-                        ?.substringAfterLast(".", "jpg") ?: "jpg"
-                    val fileName = "${UUID.randomUUID()}.$extension"
-                    val file = File(uploadsDir, fileName)
-                    part.streamProvider().use { input ->
-                        file.outputStream().buffered().use { output ->
-                            input.copyTo(output)
-                        }
-                    }
-                    imageUrl = "http://192.168.117.92:8080/uploads/$fileName"
+                    fileName  = part.originalFileName ?: "image.jpg"
+                    imageBytes = part.streamProvider().readBytes()
                 }
                 else -> {}
             }
             part.dispose()
         }
 
-        if (imageUrl != null) {
-            call.respond(
-                HttpStatusCode.OK,
-                ApiResponse(true, "Imagen subida", mapOf("url" to imageUrl!!))
-            )
-        } else {
-            call.respond(
+        if (imageBytes == null) {
+            return@post call.respond(
                 HttpStatusCode.BadRequest,
                 ApiResponse<Nothing>(false, "No se recibió imagen")
             )
         }
-    }
 
-    get("/uploads/{filename}") {
-        val filename = call.parameters["filename"]
-            ?: return@get call.respond(HttpStatusCode.BadRequest)
-        val file = File("uploads/$filename")
-        if (file.exists()) {
-            call.respondFile(file)
-        } else {
-            call.respond(HttpStatusCode.NotFound)
+        try {
+            val cloudName    = "dkn0uaome"
+            val uploadPreset = "galery_absaide"
+            val boundary     = "Boundary-${System.currentTimeMillis()}"
+            val url          = URL("https://api.cloudinary.com/v1_1/$cloudName/image/upload")
+            val conn         = url.openConnection() as HttpURLConnection
+
+            conn.requestMethod = "POST"
+            conn.doOutput      = true
+            conn.setRequestProperty("Content-Type", "multipart/form-data; boundary=$boundary")
+
+            val body   = ByteArrayOutputStream()
+            val writer = PrintStream(body, true, "UTF-8")
+
+            writer.println("--$boundary")
+            writer.println("Content-Disposition: form-data; name=\"upload_preset\"")
+            writer.println()
+            writer.println(uploadPreset)
+
+            writer.println("--$boundary")
+            writer.println("Content-Disposition: form-data; name=\"file\"; filename=\"$fileName\"")
+            writer.println("Content-Type: image/jpeg")
+            writer.println()
+            writer.flush()
+            body.write(imageBytes!!)
+            writer.println()
+            writer.println("--$boundary--")
+            writer.flush()
+
+            conn.outputStream.write(body.toByteArray())
+            conn.outputStream.flush()
+
+            val response = try {
+                conn.inputStream.bufferedReader().readText()
+            } catch (e: Exception) {
+                conn.errorStream?.bufferedReader()?.readText() ?: throw e
+            }
+
+            val urlRegex  = Regex("\"secure_url\"\\s*:\\s*\"([^\"]+)\"")
+            val secureUrl = urlRegex.find(response)?.groupValues?.get(1)?.replace("\\/", "/")
+                ?: return@post call.respond(
+                    HttpStatusCode.InternalServerError,
+                    ApiResponse<Nothing>(false, "Error al subir a Cloudinary: $response")
+                )
+
+            call.respond(
+                HttpStatusCode.OK,
+                ApiResponse(true, "Imagen subida", mapOf("url" to secureUrl))
+            )
+
+        } catch (e: Exception) {
+            call.respond(
+                HttpStatusCode.InternalServerError,
+                ApiResponse<Nothing>(false, "Error: ${e.message}")
+            )
         }
     }
 }
