@@ -53,10 +53,10 @@ fun Route.uploadRoutes() {
             val apiSecret = "h_HFwkCIRfkKxdeNcSxCTvZcGZ8"
             val timestamp = (System.currentTimeMillis() / 1000).toString()
 
-            // Generar firma SHA1
+            // Firma correcta — parámetros en orden alfabético + secret al final
             val toSign    = "timestamp=$timestamp$apiSecret"
             val signature = MessageDigest.getInstance("SHA-1")
-                .digest(toSign.toByteArray())
+                .digest(toSign.toByteArray(Charsets.UTF_8))
                 .joinToString("") { "%02x".format(it) }
 
             val boundary = "Boundary-${System.currentTimeMillis()}"
@@ -65,48 +65,45 @@ fun Route.uploadRoutes() {
 
             conn.requestMethod = "POST"
             conn.doOutput      = true
+            conn.connectTimeout = 30000
+            conn.readTimeout    = 30000
             conn.setRequestProperty("Content-Type", "multipart/form-data; boundary=$boundary")
 
             val body   = ByteArrayOutputStream()
             val writer = PrintStream(body, true, "UTF-8")
 
-            // api_key
-            writer.println("--$boundary")
-            writer.println("Content-Disposition: form-data; name=\"api_key\"")
-            writer.println()
-            writer.println(apiKey)
+            fun addField(name: String, value: String) {
+                writer.print("--$boundary\r\n")
+                writer.print("Content-Disposition: form-data; name=\"$name\"\r\n")
+                writer.print("\r\n")
+                writer.print("$value\r\n")
+            }
 
-            // timestamp
-            writer.println("--$boundary")
-            writer.println("Content-Disposition: form-data; name=\"timestamp\"")
-            writer.println()
-            writer.println(timestamp)
+            addField("api_key",   apiKey)
+            addField("timestamp", timestamp)
+            addField("signature", signature)
 
-            // signature
-            writer.println("--$boundary")
-            writer.println("Content-Disposition: form-data; name=\"signature\"")
-            writer.println()
-            writer.println(signature)
-
-            // file
-            writer.println("--$boundary")
-            writer.println("Content-Disposition: form-data; name=\"file\"; filename=\"$fileName\"")
-            writer.println("Content-Type: image/jpeg")
-            writer.println()
+            // Archivo
+            writer.print("--$boundary\r\n")
+            writer.print("Content-Disposition: form-data; name=\"file\"; filename=\"$fileName\"\r\n")
+            writer.print("Content-Type: image/jpeg\r\n")
+            writer.print("\r\n")
             writer.flush()
             body.write(imageBytes!!)
-            writer.println()
-            writer.println("--$boundary--")
+            writer.print("\r\n")
+            writer.print("--$boundary--\r\n")
             writer.flush()
 
             conn.outputStream.write(body.toByteArray())
             conn.outputStream.flush()
 
             val response = try {
-                conn.inputStream.bufferedReader().readText()
+                conn.inputStream.bufferedReader(Charsets.UTF_8).readText()
             } catch (e: Exception) {
-                conn.errorStream?.bufferedReader()?.readText() ?: throw e
+                conn.errorStream?.bufferedReader(Charsets.UTF_8)?.readText() ?: throw e
             }
+
+            println("CLOUDINARY RESPONSE: $response")
 
             val urlRegex  = Regex("\"secure_url\"\\s*:\\s*\"([^\"]+)\"")
             val secureUrl = urlRegex.find(response)?.groupValues?.get(1)?.replace("\\/", "/")
