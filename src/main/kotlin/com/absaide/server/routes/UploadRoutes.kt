@@ -13,6 +13,7 @@ import java.net.HttpURLConnection
 import java.net.URL
 import java.io.ByteArrayOutputStream
 import java.io.PrintStream
+import java.security.MessageDigest
 
 fun Route.uploadRoutes() {
 
@@ -31,7 +32,7 @@ fun Route.uploadRoutes() {
         multipart.forEachPart { part ->
             when (part) {
                 is PartData.FileItem -> {
-                    fileName  = part.originalFileName ?: "image.jpg"
+                    fileName   = part.originalFileName ?: "image.jpg"
                     imageBytes = part.streamProvider().readBytes()
                 }
                 else -> {}
@@ -47,11 +48,20 @@ fun Route.uploadRoutes() {
         }
 
         try {
-            val cloudName    = "dkn0uaome"
-            val uploadPreset = "galery_absaide"
-            val boundary     = "Boundary-${System.currentTimeMillis()}"
-            val url          = URL("https://api.cloudinary.com/v1_1/$cloudName/image/upload")
-            val conn         = url.openConnection() as HttpURLConnection
+            val cloudName = "dkn0uaome"
+            val apiKey    = "894776483867838"
+            val apiSecret = "h_HFwkCIRfkKxdeNcSxCTvZcGZ8"
+            val timestamp = (System.currentTimeMillis() / 1000).toString()
+
+            // Generar firma SHA1
+            val toSign    = "timestamp=$timestamp$apiSecret"
+            val signature = MessageDigest.getInstance("SHA-1")
+                .digest(toSign.toByteArray())
+                .joinToString("") { "%02x".format(it) }
+
+            val boundary = "Boundary-${System.currentTimeMillis()}"
+            val url      = URL("https://api.cloudinary.com/v1_1/$cloudName/image/upload")
+            val conn     = url.openConnection() as HttpURLConnection
 
             conn.requestMethod = "POST"
             conn.doOutput      = true
@@ -60,11 +70,25 @@ fun Route.uploadRoutes() {
             val body   = ByteArrayOutputStream()
             val writer = PrintStream(body, true, "UTF-8")
 
+            // api_key
             writer.println("--$boundary")
-            writer.println("Content-Disposition: form-data; name=\"upload_preset\"")
+            writer.println("Content-Disposition: form-data; name=\"api_key\"")
             writer.println()
-            writer.println(uploadPreset)
+            writer.println(apiKey)
 
+            // timestamp
+            writer.println("--$boundary")
+            writer.println("Content-Disposition: form-data; name=\"timestamp\"")
+            writer.println()
+            writer.println(timestamp)
+
+            // signature
+            writer.println("--$boundary")
+            writer.println("Content-Disposition: form-data; name=\"signature\"")
+            writer.println()
+            writer.println(signature)
+
+            // file
             writer.println("--$boundary")
             writer.println("Content-Disposition: form-data; name=\"file\"; filename=\"$fileName\"")
             writer.println("Content-Type: image/jpeg")
@@ -88,7 +112,7 @@ fun Route.uploadRoutes() {
             val secureUrl = urlRegex.find(response)?.groupValues?.get(1)?.replace("\\/", "/")
                 ?: return@post call.respond(
                     HttpStatusCode.InternalServerError,
-                    ApiResponse<Nothing>(false, "Error al subir a Cloudinary: $response")
+                    ApiResponse<Nothing>(false, "Error Cloudinary: $response")
                 )
 
             call.respond(
