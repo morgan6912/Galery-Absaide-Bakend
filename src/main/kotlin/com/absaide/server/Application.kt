@@ -68,21 +68,19 @@ fun Application.module() {
     routing {
         authRoutes(jwtSecret, jwtIssuer, jwtAudience)
 
-        // Rutas públicas — sin autenticación
-        artworkRoutes()
+        // GET público — sin autenticación
+        artworkPublicRoutes()
 
         get("/uploads/{filename}") {
             val filename = call.parameters["filename"] ?: return@get
             val file = File("uploads/$filename")
-            if (file.exists()) {
-                call.respondFile(file)
-            } else {
-                call.respond(HttpStatusCode.NotFound)
-            }
+            if (file.exists()) call.respondFile(file)
+            else call.respond(HttpStatusCode.NotFound)
         }
 
         // Rutas protegidas — requieren JWT
         authenticate("jwt-auth") {
+            artworkRoutes()  // POST y DELETE
             userRoutes()
             favoriteRoutes()
             uploadRoutes()

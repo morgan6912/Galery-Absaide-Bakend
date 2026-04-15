@@ -25,10 +25,18 @@ fun Route.authRoutes(jwtSecret: String, jwtIssuer: String, jwtAudience: String) 
     }
 }
 
+// GET público — sin autenticación
+fun Route.artworkPublicRoutes() {
+    val svc = ArtworkService(ArtworkRepository())
+    get("/artworks") {
+        call.respond(HttpStatusCode.OK, svc.getAll())
+    }
+}
+
+// POST y DELETE protegidos — requieren JWT
 fun Route.artworkRoutes() {
     val svc = ArtworkService(ArtworkRepository())
     route("/artworks") {
-        get { call.respond(HttpStatusCode.OK, svc.getAll()) }
         post {
             val artistId = call.principal<JWTPrincipal>()?.payload?.getClaim("userId")?.asInt()
                 ?: return@post call.respond(HttpStatusCode.Unauthorized)
@@ -43,29 +51,22 @@ fun Route.artworkRoutes() {
     }
 }
 
-// ── Usuarios + Admin en un solo bloque ────────────────────────────────────
 fun Route.userRoutes() {
     val svc       = UserService(UserRepository())
     val adminRepo = UserAdminRepository()
-
     route("/users") {
-        // Listar todos (solo admin)
         get {
             val role = call.principal<JWTPrincipal>()?.payload?.getClaim("role")?.asString()
             if (role != "ADMIN") return@get call.respond(
                 HttpStatusCode.Forbidden, ApiResponse<Nothing>(false, "Solo admins"))
             call.respond(HttpStatusCode.OK, svc.getAll())
         }
-
-        // Ver uno por id
         get("/{id}") {
             val id = call.parameters["id"]?.toIntOrNull()
                 ?: return@get call.respond(HttpStatusCode.BadRequest)
             svc.getById(id)?.let { call.respond(HttpStatusCode.OK, it) }
                 ?: call.respond(HttpStatusCode.NotFound, ApiResponse<Nothing>(false, "No encontrado"))
         }
-
-        // Eliminar usuario (solo admin)
         delete("/{id}") {
             val role = call.principal<JWTPrincipal>()?.payload?.getClaim("role")?.asString()
             if (role != "ADMIN") return@delete call.respond(HttpStatusCode.Forbidden)
@@ -74,8 +75,6 @@ fun Route.userRoutes() {
             if (svc.delete(id)) call.respond(HttpStatusCode.OK, ApiResponse<Nothing>(true, "Usuario eliminado"))
             else call.respond(HttpStatusCode.NotFound, ApiResponse<Nothing>(false, "No encontrado"))
         }
-
-        // Cambiar rol (solo admin)
         put("/{id}/role") {
             val role = call.principal<JWTPrincipal>()?.payload?.getClaim("role")?.asString()
             if (role != "ADMIN") return@put call.respond(
@@ -88,8 +87,6 @@ fun Route.userRoutes() {
             else
                 call.respond(HttpStatusCode.NotFound, ApiResponse<Nothing>(false, "No encontrado"))
         }
-
-        // Cambiar estado/ban (solo admin)
         put("/{id}/status") {
             val role = call.principal<JWTPrincipal>()?.payload?.getClaim("role")?.asString()
             if (role != "ADMIN") return@put call.respond(
